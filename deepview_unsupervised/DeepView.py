@@ -250,13 +250,13 @@ class DeepView_unsupervised:
 		for i in range(0, n_inputs, self.batch_size):
 			n_preds = min(i + self.batch_size, n_inputs)
 			batch = x[i:n_preds]
-			batch_reshaped = batch.reshape(batch.shape[0], 3072) # potentially change with data shape
+			batch_reshaped = batch.reshape(batch.shape[0], batch.shape[1]* batch.shape[2]) # potentially change with data shape
 			Y_new = np.array([self.mle_single(batch_reshaped, entry) for entry in batch_reshaped])
 			umap_Ys[i:n_preds]= Y_new
 			preds[i:n_preds]= np.array(self.model(batch))
 
 		self.lids_of_x = umap_Ys
-		X_reshaped = x.reshape(x.shape[0], 3072)
+		X_reshaped = x.reshape(x.shape[0], x.shape[1]* x.shape[2])
 		X_reshaped = np.column_stack((X_reshaped, self.lids_of_x))
 		umap_embed = umap.UMAP(n_neighbors=30, random_state=42).fit_transform(X_reshaped, np.max(preds, axis=1))
 		#kmeans_labels = KMeans(n_clusters=2, random_state=0).fit_predict(umap_embed)
@@ -273,11 +273,11 @@ class DeepView_unsupervised:
 		#-------------------------------------------------
 		for i in outliers:
 			hdbout_labels[i] = self.which_label_outlier
-		plt.scatter(umap_embed[:, 0], umap_embed[:, 1], c=hdbout_labels, s=0.1, cmap='Spectral');
+		#plt.scatter(umap_embed[:, 0], umap_embed[:, 1], c=hdbout_labels, s=0.1, cmap='Spectral');
 		#plt.savefig("umap_of_lids.png")
-		plt.close()
-		plt.scatter(*umap_embed.T, s=50, linewidth=0, c='gray', alpha=0.25)
-		plt.scatter(*umap_embed[outliers].T, s=50, linewidth=0, c='red', alpha=0.5)
+		#plt.close()
+		#plt.scatter(*umap_embed.T, s=50, linewidth=0, c='gray', alpha=0.25)
+		#plt.scatter(*umap_embed[outliers].T, s=50, linewidth=0, c='red', alpha=0.5)
 		#plt.savefig("outliers.png")
 		plt.close()
 		self.y_uncerts = hdbout_labels
@@ -366,20 +366,20 @@ class DeepView_unsupervised:
 
 		mesh_preds = self._predict_batches(grid_samples)
 		#----------------------------------------------
-		X_reshaped = grid_samples.reshape(grid_samples.shape[0], 3072)
+		X_reshaped = grid_samples.reshape(grid_samples.shape[0], grid_samples.shape[1]* grid_samples.shape[2])
 		umap_embed = umap.UMAP(n_neighbors=30, random_state=42).fit_transform(X_reshaped, self.lids_of_x)
 		hdboutliers = hdbscan.HDBSCAN(min_samples=10, min_cluster_size=500, ).fit(umap_embed)
 		# plt.savefig("umap_of_lids.png")
-		print(np.amax(hdboutliers.outlier_scores_))  # TODO do i just assume values are between 0 and 1 or do i make sure?
-		print(np.amin(hdboutliers.outlier_scores_))
+		#print(np.amax(hdboutliers.outlier_scores_))  # assume values are between 0 and 1
+		#print(np.amin(hdboutliers.outlier_scores_))
 		threshold = pd.Series(hdboutliers.outlier_scores_).quantile(0.9)
 		outliers = np.where(hdboutliers.outlier_scores_ > threshold)[0]
-		kmeans_labels = np.array([0] * len(hdboutliers.outlier_scores_))
-		for i in outliers:  # TODO quickcode?
-			kmeans_labels[i] = 1
+		outlier_labels = np.array([0] * len(hdboutliers.outlier_scores_))
+		for i in outliers: 
+			outlier_labels[i] = 1
 		#kmeans_labels = KMeans(n_clusters=2, random_state=0).fit_predict(umap_embed)
-		self.y_uncerts= kmeans_labels #TODO care here with this change
-		plt.scatter(umap_embed[:, 0], umap_embed[:, 1], c=kmeans_labels, s=0.1, cmap='Spectral')
+		self.y_uncerts= outlier_labels
+		plt.scatter(umap_embed[:, 0], umap_embed[:, 1], c=outlier_labels, s=0.1, cmap='Spectral')
 		#plt.savefig("umap_of_lids.png")
 		#----------------------------------------------
 		mesh_preds = mesh_preds + 1e-8
@@ -436,9 +436,11 @@ class DeepView_unsupervised:
 			ind = event.ind
 			xs, ys = artist.get_data()
 			point = [xs[ind][0], ys[ind][0]]
-			sample, p, t = self.get_artist_sample(point)  # TODO remove t
-			title = '%s <-> %s' if p != t else '%s --- %s'
-			title = title % (self.classes[p], self.classes[t])
+			sample, p, t = self.get_artist_sample(point)  #y_pred is ,y_uncerts
+			#title = 'uncertain' if p != t else 'certain' # if self.y_uncerts == self.which_label_outlier = 1
+			title= 'uncertain' if p == self.which_label_outlier else 'certain'
+			title= title
+			#tilte = 'uncertain' if p == self.which_label_outlier else 'certain'
 			self.disable_synth = True
 		elif not self.disable_synth:
 			# workaraound: inverse embedding needs more points
@@ -484,13 +486,13 @@ class DeepView_unsupervised:
 
 	def get_artist_sample(self, point):
 		'''
-		Maps the location of an embedded point to it's image.
+		Maps the location of an embedded point to its image.
 		'''
 		sample_id = np.argmin(np.linalg.norm(self.embedded - point, axis=1))
 		sample = self.samples[sample_id]
 		sample = sample - sample.min()
 		sample = sample / sample.max()
-		yp, yt = (int(self.y_pred[sample_id]), int(self.y_uncerts[sample_id])) #TODO remove yt
+		yp, yt = (int(self.y_pred[sample_id]), int(self.y_uncerts[sample_id])) #y_pred is ,y_uncerts is the anomaly score- normal or abnormal?
 		return sample, yp, yt
 
 	def show(self):
@@ -519,7 +521,7 @@ class DeepView_unsupervised:
 		print(self.embedded.shape)
 
 		for c in range(self.n_classes):
-			print((self.y_uncerts ==c).shape)
+			#print((self.y_uncerts ==c).shape)
 			data = self.embedded[self.y_uncerts==c]
 			self.sample_plots[c].set_data(data.transpose())
 
@@ -532,8 +534,8 @@ class DeepView_unsupervised:
 
 		self.fig.canvas.draw()
 		self.fig.canvas.flush_events()
-		plt.savefig("DeepView_unsup.png")
-
+		#plt.savefig("DeepView_unsup.png")
+		plt.show(block=True)
 
 	@staticmethod
 	def create_simple_wrapper(classify):

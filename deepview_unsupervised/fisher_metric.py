@@ -76,7 +76,7 @@ def predict_many(model, x, n_classes, batch_size):
 		r1, r2 = b*batch_size, (b+1)*batch_size
 		inputs = x_reshape[r1:r2]
 		pred = model(inputs) # TODO use this in the end somehow
-		inputs_reshaped = inputs.reshape(inputs.shape[0],3072) # TODO potentially change with data shape
+		inputs_reshaped = inputs.reshape(inputs.shape[0], inputs.shape[1] * inputs.shape[2]) # TODO potentially change with data shape
 		Y_new = np.array([mle_single(inputs_reshaped, entry) for entry in inputs_reshaped])
 		mean = np.mean(Y_new)
 		Y_labels = [1 if i > 2 * mean else 0 for i in Y_new]  # TODO: output prediction probabilities for uncertain certain - change this to a better publication #distinction probabilities
